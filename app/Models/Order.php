@@ -5,11 +5,12 @@ namespace App\Models;
 use App\Enums\OrderStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\OrderScopes;
 
 class Order extends Model
 {
     //
-    use HasFactory;
+    use HasFactory, OrderScopes;
     protected $fillable = [
         'customer_id',
         'store_id',

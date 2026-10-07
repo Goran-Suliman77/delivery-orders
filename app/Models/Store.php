@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Scopes\ActiveStoreScope;
 
 class Store extends Model
 {
@@ -21,6 +22,10 @@ class Store extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new ActiveStoreScope);
     }
 
     public function products()
