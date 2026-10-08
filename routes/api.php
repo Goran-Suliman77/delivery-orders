@@ -2,13 +2,41 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\StoreController;
+use App\Http\Responses\ApiResponse;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::get('/stores/{store}/products', [
+    StoreController::class,
+    'products',
+]);
 
-Route::get('/test', function (Request $request) {
-    return response()->json([
-    'status' => 'success',
-    'message' => 'API is working!']);
+Route::apiResource('stores', StoreController::class)
+    ->only([
+        'index',
+        'show',
+    ])
+    ->missing(function () {
+        return ApiResponse::error(
+            message: 'المتجر المطلوب غير موجود',
+            status: 404
+        );
+    });
+
+Route::apiResource('products', ProductController::class)
+    ->only([
+        'index',
+        'show',
+    ])
+    ->missing(function () {
+        return ApiResponse::error(
+            message: 'المنتج المطلوب غير موجود',
+            status: 404
+        );
+    });
+Route::fallback(function (Request $request) {
+    return ApiResponse::error(
+        message: 'الرابط المطلوب غير موجود',
+        status: 404
+    );
 });
