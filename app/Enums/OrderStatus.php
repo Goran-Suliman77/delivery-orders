@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum OrderStatus:string
+enum OrderStatus: string
 {
     //
     case Pending = 'pending';
@@ -14,17 +14,49 @@ enum OrderStatus:string
     case Delivered = 'delivered';
     case Cancelled = 'cancelled';
 
-    public function label(): string
+    public function allowedTransitions(): array
     {
         return match ($this) {
-            self::Pending => 'Pending',
-            self::Confirmed => 'Confirmed',
-            self::Preparing => 'Preparing',
-            self::Ready => 'Ready',
-            self::Assigned => 'Assigned',
-            self::PickedUp => 'Picked Up',
-            self::Delivered => 'Delivered',
-            self::Cancelled => 'Cancelled',
+            self::Pending => [
+                self::Confirmed,
+                self::Cancelled,
+            ],
+
+            self::Confirmed => [
+                self::Preparing,
+                self::Cancelled,
+            ],
+
+            self::Preparing => [
+                self::Ready,
+                self::Cancelled,
+            ],
+
+            self::Ready => [
+                self::Assigned,
+                self::Cancelled,
+            ],
+
+            self::Assigned => [
+                self::PickedUp,
+                self::Cancelled,
+            ],
+
+            self::PickedUp => [
+                self::Delivered,
+            ],
+
+            self::Delivered,
+            self::Cancelled => [],
         };
+    }
+
+    public function canTransitionTo(self $next): bool
+    {
+        return in_array(
+            $next,
+            $this->allowedTransitions(),
+            true
+        );
     }
 }
