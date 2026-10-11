@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Responses\ApiResponse;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\Admin\StoreController as AdminStoreController;
+use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
 
 Route::get('/stores/{store}/products', [
     StoreController::class,
@@ -105,6 +108,95 @@ Route::prefix('auth')->group(function () {
         ]);
     });
 });
+
+
+
+Route::middleware('auth:sanctum')
+    ->prefix('admin')
+    ->group(function () {
+
+        // إدارة المتاجر
+        Route::get('/stores', [
+            AdminStoreController::class,
+            'index',
+        ]);
+
+        Route::post('/stores', [
+            AdminStoreController::class,
+            'store',
+        ]);
+
+        Route::get('/stores/{storeId}', [
+            AdminStoreController::class,
+            'show',
+        ])->whereNumber('storeId');
+
+        Route::patch('/stores/{storeId}', [
+            AdminStoreController::class,
+            'update',
+        ])->whereNumber('storeId');
+
+        Route::patch('/stores/{storeId}/activate', [
+            AdminStoreController::class,
+            'activate',
+        ])->whereNumber('storeId');
+
+        Route::patch('/stores/{storeId}/deactivate', [
+            AdminStoreController::class,
+            'deactivate',
+        ])->whereNumber('storeId');
+
+
+        // إدارة منتجات متجر
+        Route::get('/stores/{storeId}/products', [
+            AdminProductController::class,
+            'indexForStore',
+        ])->whereNumber('storeId');
+
+        Route::post('/stores/{storeId}/products', [
+            AdminProductController::class,
+            'store',
+        ])->whereNumber('storeId');
+
+
+        // إدارة المنتجات بصورة منفردة
+        Route::get('/products/{productId}', [
+            AdminProductController::class,
+            'show',
+        ])->whereNumber('productId');
+
+        Route::patch('/products/{productId}', [
+            AdminProductController::class,
+            'update',
+        ])->whereNumber('productId');
+
+        Route::patch('/products/{productId}/activate', [
+            AdminProductController::class,
+            'activate',
+        ])->whereNumber('productId');
+
+        Route::patch('/products/{productId}/deactivate', [
+            AdminProductController::class,
+            'deactivate',
+        ])->whereNumber('productId');
+    });
+
+// إدارة السائقين
+Route::get('/drivers', [
+    AdminDriverController::class,
+    'index',
+]);
+
+Route::get('/drivers/{driverId}', [
+    AdminDriverController::class,
+    'show',
+])->whereNumber('driverId');
+
+Route::patch('/drivers/{driverId}', [
+    AdminDriverController::class,
+    'update',
+])->whereNumber('driverId');
+
 
 Route::fallback(function (Request $request) {
     return ApiResponse::error(

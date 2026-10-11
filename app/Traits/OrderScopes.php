@@ -58,6 +58,11 @@ trait OrderScopes
 
     public function scopeToday(Builder $query): Builder
     {
-        return $query->whereDate('created_at', today());
+       $start = today();
+    $end = $start->copy()->addDay();
+
+    return $query
+        ->where('created_at', '>=', $start)
+        ->where('created_at', '<', $end);
     }
 }
