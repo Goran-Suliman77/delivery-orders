@@ -10,6 +10,8 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use App\Models\Role;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -18,11 +20,30 @@ class AuthController extends Controller
     ): JsonResponse {
         $data = $request->validated();
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => $data['password'],
-        ]);
+        $customerRole = Role::query()
+            ->where('name', 'customer')
+            ->first();
+
+        if (! $customerRole) {
+            return ApiResponse::error(
+                message: 'دور الزبون غير مهيأ. تحقق من تشغيل Seeder.',
+                status: 500,
+            );
+        }
+
+        $user = DB::transaction(function () use ($data, $customerRole) {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+            ]);
+
+            $user->roles()->syncWithoutDetaching([
+                $customerRole->id,
+            ]);
+
+            return $user;
+        });
 
         $token = $user
             ->createToken('tawseela-api')

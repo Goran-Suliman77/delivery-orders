@@ -11,7 +11,12 @@ use App\Http\Controllers\Api\AuthController;
 Route::get('/stores/{store}/products', [
     StoreController::class,
     'products',
-]);
+])->missing(function (Request $request) {
+    return ApiResponse::error(
+        message: 'المتجر المطلوب غير موجود',
+        status: 404
+    );
+});
 
 Route::apiResource('stores', StoreController::class)
     ->only([
@@ -37,38 +42,45 @@ Route::apiResource('products', ProductController::class)
         );
     });
 
-Route::apiResource('orders', OrderController::class)
-    ->only([
-        'index',
-        'store',
-        'show',
-    ])
-    ->missing(function () {
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    Route::apiResource('orders', OrderController::class)
+        ->only([
+            'index',
+            'store',
+            'show',
+        ])
+        ->missing(function (Request $request) {
+            return ApiResponse::error(
+                message: 'الطلب المطلوب غير موجود',
+                status: 404
+            );
+        });
+
+
+    Route::patch(
+        '/orders/{order}/status',
+        [OrderController::class, 'updateStatus']
+    )->missing(function (Request $request) {
         return ApiResponse::error(
             message: 'الطلب المطلوب غير موجود',
             status: 404
         );
     });
 
-Route::patch(
-    '/orders/{order}/status',
-    [OrderController::class, 'updateStatus']
-)->missing(function () {
-    return ApiResponse::error(
-        message: 'الطلب المطلوب غير موجود',
-        status: 404
-    );
+
+    Route::patch(
+        '/orders/{order}/assign-driver',
+        [OrderController::class, 'assignDriver']
+    )->missing(function (Request $request) {
+        return ApiResponse::error(
+            message: 'الطلب المطلوب غير موجود',
+            status: 404
+        );
+    });
 });
 
-Route::patch(
-    '/orders/{order}/assign-driver',
-    [OrderController::class, 'assignDriver']
-)->missing(function () {
-    return ApiResponse::error(
-        message: 'الطلب المطلوب غير موجود',
-        status: 404
-    );
-});
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [

@@ -15,19 +15,13 @@ class CreateOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_id' => [
-                'required',
-                'integer',
-                'exists:users,id',
-            ],
-
             'store_id' => [
                 'required',
                 'integer',
                 Rule::exists('stores', 'id')
                     ->where(
-                        fn ($query) =>
-                            $query->where('is_active', true)
+                        fn($query) =>
+                        $query->where('is_active', true)
                     ),
             ],
 
@@ -61,44 +55,38 @@ class CreateOrderRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'customer_id.required' =>
-                'الزبون مطلوب.',
-
-            'customer_id.exists' =>
-                'الزبون غير موجود.',
-
             'store_id.required' =>
-                'المتجر مطلوب.',
+            'المتجر مطلوب.',
 
             'store_id.exists' =>
-                'المتجر غير موجود أو غير متاح حاليًا.',
+            'المتجر غير موجود أو غير متاح حاليًا.',
 
             'items.required' =>
-                'يجب إضافة منتجات إلى الطلب.',
+            'يجب إضافة منتجات إلى الطلب.',
 
             'items.min' =>
-                'يجب أن يحتوي الطلب على منتج واحد على الأقل.',
+            'يجب أن يحتوي الطلب على منتج واحد على الأقل.',
 
             'items.*.product_id.required' =>
-                'معرف المنتج مطلوب.',
+            'معرف المنتج مطلوب.',
 
             'items.*.product_id.exists' =>
-                'أحد المنتجات المطلوبة غير موجود.',
+            'أحد المنتجات المطلوبة غير موجود.',
 
             'items.*.product_id.distinct' =>
-                'لا يمكن تكرار المنتج داخل الطلب.',
+            'لا يمكن تكرار المنتج داخل الطلب.',
 
             'items.*.quantity.required' =>
-                'كمية المنتج مطلوبة.',
+            'كمية المنتج مطلوبة.',
 
             'items.*.quantity.integer' =>
-                'الكمية يجب أن تكون رقمًا صحيحًا.',
+            'الكمية يجب أن تكون رقمًا صحيحًا.',
 
             'items.*.quantity.min' =>
-                'الكمية يجب أن تكون أكبر من صفر.',
+            'الكمية يجب أن تكون أكبر من صفر.',
 
             'items.*.quantity.max' =>
-                'الحد الأقصى للكمية هو 100.',
+            'الحد الأقصى للكمية هو 100.',
         ];
     }
 }

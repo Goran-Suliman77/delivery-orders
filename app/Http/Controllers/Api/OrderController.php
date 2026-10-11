@@ -28,17 +28,63 @@ class OrderController extends Controller
     public function index(OrderIndexRequest $request)
     {
         $validated = $request->validated();
-        $orders = Order::query()
-            ->active()
+        $this->authorize('viewAny', Order::class);
+        $user = $request->user();
 
-            ->select([
-                'id',
-                'customer_id',
-                'store_id',
-                'driver_id',
-                'status',
-                'created_at',
-            ])
+        $canViewAll = $user->hasPermissionTo('orders.view_all');
+        $canViewOwn = $user->hasPermissionTo('orders.view_own');
+        $canViewAssigned = $user->hasPermissionTo('orders.view_assigned');
+
+        // لا نسمح بفلترة الطلبات حسب الزبون إلا لمن يملك الصلاحية.
+        if (isset($validated['customer_id'])) {
+            $this->authorize('filterByCustomer', Order::class);
+        }
+
+        $query = Order::query()->active();
+
+        // إذا لم يكن لديه صلاحية مشاهدة جميع الطلبات،
+        // نحصر النتائج بطلباته أو بالطلبات المسندة إليه.
+        if (! $canViewAll) {
+            $driverId = $canViewAssigned
+                ? $user->driver()->value('id')
+                : null;
+
+            $query->where(function ($subQuery) use (
+                $user,
+                $canViewOwn,
+                $canViewAssigned,
+                $driverId
+            ) {
+                $hasCondition = false;
+
+                if ($canViewOwn) {
+                    $subQuery->where('customer_id', $user->id);
+                    $hasCondition = true;
+                }
+
+                if ($canViewAssigned && $driverId !== null) {
+                    if ($hasCondition) {
+                        $subQuery->orWhere('driver_id', $driverId);
+                    } else {
+                        $subQuery->where('driver_id', $driverId);
+                    }
+
+                    $hasCondition = true;
+                }
+
+                if (! $hasCondition) {
+                    $subQuery->whereRaw('1 = 0');
+                }
+            });
+        }
+        $orders =  $query->select([
+            'id',
+            'customer_id',
+            'store_id',
+            'driver_id',
+            'status',
+            'created_at',
+        ])
 
             ->with([
                 'customer:id,name',
@@ -110,9 +156,9 @@ class OrderController extends Controller
 
         if ($orders->total() === 0) {
             if (($validated['today'] ?? false) === true) {
-                $message = 'لا توجد طلبات اليوم';
+                $message = 'لا توجد طلبات لليوم تطابق معايير البحث.';
             } else {
-                $message = 'لا توجد طلبات اليوم';
+                $message = 'لا توجد طلبات تطابق معايير البحث.';
             }
         } elseif ($orders->isEmpty()) {
             $message = 'لا توجد طلبات في هذه الصفحة. جرّب صفحة أخرى.';
@@ -131,10 +177,12 @@ class OrderController extends Controller
      */
     public function store(CreateOrderRequest $request)
     {
+        $this->authorize('create', Order::class);
+
         $validated = $request->validated();
 
         $order = $this->orderService->create(
-            customerId: (int) $validated['customer_id'],
+            customerId: (int) $request->user()->id,
             storeId: (int) $validated['store_id'],
             items: $validated['items']
         );
@@ -152,6 +200,7 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
+        $this->authorize('view', $order);
         $order->load([
             'customer:id,name',
             'store:id,name',
@@ -175,9 +224,20 @@ class OrderController extends Controller
     ) {
         $validated = $request->validated();
 
+        $status = OrderStatus::from(
+            $validated['status']
+        );
+
+        // التحقق من صلاحية المستخدم على هذا الطلب
+        // وعلى الحالة التي يريد الانتقال إليها.
+        $this->authorize(
+            'updateStatus',
+            [$order, $status]
+        );
+
         $updatedOrder = $statusService->change(
             (int) $order->id,
-            OrderStatus::from($validated['status'])
+            $status
         );
 
         return ApiResponse::success(
@@ -185,7 +245,8 @@ class OrderController extends Controller
             data: [
                 'id' => $updatedOrder->id,
                 'status' => $updatedOrder->status->value,
-                'updated_at' => $updatedOrder->updated_at?->toISOString(),
+                'updated_at' => $updatedOrder->updated_at
+                    ?->toISOString(),
             ]
         );
     }
@@ -196,7 +257,7 @@ class OrderController extends Controller
         DriverAssignmentService $assignmentService
     ) {
         $validated = $request->validated();
-
+        $this->authorize('assignDriver', $order);
         $updatedOrder = $assignmentService->assign(
             orderId: (int) $order->id,
             driverId: (int) $validated['driver_id']
