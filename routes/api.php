@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\Admin\StoreController as AdminStoreController;
 use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
+use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
 
 Route::get('/stores/{store}/products', [
     StoreController::class,
@@ -179,6 +180,12 @@ Route::middleware('auth:sanctum')
             AdminProductController::class,
             'deactivate',
         ])->whereNumber('productId');
+
+        // تقارير الطلبات
+        Route::get('/reports/orders', [
+            AdminReportController::class,
+            'orders',
+        ]);
     });
 
 // إدارة السائقين

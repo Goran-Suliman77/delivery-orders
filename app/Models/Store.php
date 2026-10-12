@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Scopes\ActiveStoreScope;
+use Illuminate\Database\Eloquent\Builder;
 
 class Store extends Model
 {
@@ -36,5 +37,12 @@ class Store extends Model
     public function orders()
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function scopeOfType(
+        Builder $query,
+        string $type
+    ): Builder {
+        return $query->where('type', $type);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Enums\OrderStatus;
 use Illuminate\Database\Eloquent\Builder;
+use Carbon\CarbonInterface;
 
 //local scopes for order model
 trait OrderScopes
@@ -17,7 +18,7 @@ trait OrderScopes
         ]);
     }
 
-    public function scopeStatus( Builder $query, OrderStatus|string $status ): Builder
+    public function scopeStatus(Builder $query, OrderStatus|string $status): Builder
     {
         $value = $status instanceof OrderStatus
             ? $status->value
@@ -26,7 +27,7 @@ trait OrderScopes
         return $query->where('status', $value);
     }
 
-    public function scopeForDriver(  Builder $query, int $driverId ): Builder
+    public function scopeForDriver(Builder $query, int $driverId): Builder
     {
         return $query->where('driver_id', $driverId);
     }
@@ -35,17 +36,17 @@ trait OrderScopes
         return $query->whereNull('driver_id');
     }
 
-    public function scopeForStore( Builder $query,int $storeId): Builder
-     {
+    public function scopeForStore(Builder $query, int $storeId): Builder
+    {
         return $query->where('store_id', $storeId);
     }
 
     public function scopeForCustomer(
-    Builder $query,
-    int $customerId
-): Builder {
-    return $query->where('customer_id', $customerId);
-}
+        Builder $query,
+        int $customerId
+    ): Builder {
+        return $query->where('customer_id', $customerId);
+    }
 
     public function scopeOlderThanMinutes(Builder $query, int $minutes): Builder
     {
@@ -58,11 +59,33 @@ trait OrderScopes
 
     public function scopeToday(Builder $query): Builder
     {
-       $start = today();
-    $end = $start->copy()->addDay();
+        $start = today();
+        $end = $start->copy()->addDay();
 
-    return $query
-        ->where('created_at', '>=', $start)
-        ->where('created_at', '<', $end);
+        return $query->createdBetween($start, $end);
+    }
+
+    public function scopeForStores(
+        Builder $query,
+        array $storeIds
+    ): Builder {
+        return $query->whereIn('store_id', $storeIds);
+    }
+
+    public function scopeForDrivers(
+        Builder $query,
+        array $driverIds
+    ): Builder {
+        return $query->whereIn('driver_id', $driverIds);
+    }
+
+    public function scopeCreatedBetween(
+        Builder $query,
+        CarbonInterface $start,
+        CarbonInterface $endExclusive
+    ): Builder {
+        return $query
+            ->where('created_at', '>=', $start)
+            ->where('created_at', '<', $endExclusive);
     }
 }

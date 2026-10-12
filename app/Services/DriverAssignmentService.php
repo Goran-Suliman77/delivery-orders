@@ -64,11 +64,8 @@ class DriverAssignmentService
              * آخر مسند إلى السائق.
              */
             $hasActiveOrder = Order::query()
-                ->where('driver_id', $driver->id)
-                ->whereNotIn('status', [
-                    OrderStatus::Delivered->value,
-                    OrderStatus::Cancelled->value,
-                ])
+                ->active()
+                ->forDriver($driver->id)
                 ->exists();
 
             if ($hasActiveOrder) {

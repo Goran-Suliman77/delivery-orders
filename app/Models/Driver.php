@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Driver extends Model
 {
@@ -29,5 +30,10 @@ class Driver extends Model
     public function orders()
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function scopeAvailable(Builder $query): Builder
+    {
+        return $query->where('is_available', true);
     }
 }

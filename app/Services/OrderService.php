@@ -53,8 +53,8 @@ class OrderService
                     'price',
                     'is_active',
                 ])
-                ->where('store_id', $store->id)
-                ->where('is_active', true)
+                ->active()
+                ->forStore($store->id)
                 ->whereIn('id', $productIds)
                 ->lockForUpdate()
                 ->get();
