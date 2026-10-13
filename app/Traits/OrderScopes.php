@@ -36,6 +36,11 @@ trait OrderScopes
         return $query->whereNull('driver_id');
     }
 
+    public function scopeWithDriver(Builder $query): Builder
+    {
+        return $query->whereNotNull('driver_id');
+    }
+
     public function scopeForStore(Builder $query, int $storeId): Builder
     {
         return $query->where('store_id', $storeId);
