@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Enums\OrderStatus;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Carbon\CarbonInterface;
 
@@ -92,5 +93,69 @@ trait OrderScopes
         return $query
             ->where('created_at', '>=', $start)
             ->where('created_at', '<', $endExclusive);
+    }
+
+
+    public function scopeVisibleTo(
+        Builder $query,
+        User $user
+    ): Builder {
+        $permissionNames = $user->roles()
+            ->with('permissions:id,name')
+            ->get()
+            ->flatMap(
+                fn($role) => $role->permissions->pluck('name')
+            )
+            ->unique();
+
+        // المدير أو المستخدم المخول برؤية جميع الطلبات.
+        if ($permissionNames->contains('orders.view_all')) {
+            return $query;
+        }
+
+        $canViewOwn = $permissionNames->contains('orders.view_own');
+        $canViewAssigned = $permissionNames->contains(
+            'orders.view_assigned'
+        );
+
+        $driverId = $canViewAssigned
+            ? $user->driver()->value('id')
+            : null;
+
+        return $query->where(function (Builder $visible) use (
+            $user,
+            $canViewOwn,
+            $canViewAssigned,
+            $driverId
+        ) {
+            $hasCondition = false;
+
+            if ($canViewOwn) {
+                $visible->where('customer_id', $user->id);
+                $hasCondition = true;
+            }
+
+            if ($canViewAssigned && $driverId !== null) {
+                if ($hasCondition) {
+                    $visible->orWhere('driver_id', $driverId);
+                } else {
+                    $visible->where('driver_id', $driverId);
+                }
+
+                $hasCondition = true;
+            }
+
+            // لا نسمح بإرجاع أي طلب إذا لم توجد صلاحية مناسبة.
+            if (! $hasCondition) {
+                $visible->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    public function scopeAvailable(Builder $query): Builder
+    {
+        return $query
+            ->active()
+            ->whereHas('store');
     }
 }

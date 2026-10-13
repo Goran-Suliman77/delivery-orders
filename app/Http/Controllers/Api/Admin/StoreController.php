@@ -8,41 +8,33 @@ use App\Http\Requests\Admin\StoreRequest;
 use App\Http\Resources\AdminStoreResource;
 use App\Http\Responses\ApiResponse;
 use App\Models\Store;
-use App\Models\Scopes\ActiveStoreScope;
 use Illuminate\Http\JsonResponse;
+use App\Contracts\StoreManagementServiceInterface;
+use App\Http\Requests\StoreIndexRequest;
 
 class StoreController extends Controller
 {
     //
-    public function index(Request $request): JsonResponse
-    {
+    public function __construct(
+        private readonly StoreManagementServiceInterface $stores
+    ) {}
+
+    public function index(
+        StoreIndexRequest $request
+    ): JsonResponse {
         $this->authorize('manage', Store::class);
 
-        $perPage = min(
-            max((int) $request->query('per_page', 50), 1),
-            100
+        $stores = $this->stores->paginateForAdministration(
+            $request->validated()
         );
-
-        $query = Store::withoutGlobalScope(ActiveStoreScope::class)
-            ->select([
-                'id',
-                'name',
-                'type',
-                'is_active',
-            ])
-            ->withCount('products');
-
-        if ($request->filled('type')) {
-            $query->where('type', $request->query('type'));
-        }
-
-        $stores = $query
-            ->latest('id')
-            ->paginate($perPage);
 
         $message = $stores->total() > 0
             ? 'تم جلب المتاجر بنجاح'
             : 'لا توجد متاجر تطابق معايير البحث';
+
+        if ($stores->isEmpty() && $stores->total() > 0) {
+            $message = 'لا توجد متاجر في هذه الصفحة. جرّب صفحة أخرى.';
+        }
 
         return ApiResponse::paginated(
             $stores,
@@ -52,17 +44,14 @@ class StoreController extends Controller
         );
     }
 
-    public function store(StoreRequest $request): JsonResponse
-    {
+    public function store(
+        StoreRequest $request
+    ): JsonResponse {
         $this->authorize('manage', Store::class);
 
-        $store = Store::create([
-            'name' => $request->validated('name'),
-            'type' => $request->validated('type'),
-            'is_active' => true,
-        ]);
-
-        $store->loadCount('products');
+        $store = $this->stores->create(
+            $request->validated()
+        );
 
         return ApiResponse::success(
             message: 'تم إنشاء المتجر بنجاح',
@@ -72,11 +61,15 @@ class StoreController extends Controller
         );
     }
 
-    public function show(int $storeId): JsonResponse
-    {
+    public function show(
+        Request $request,
+        int $storeId
+    ): JsonResponse {
         $this->authorize('manage', Store::class);
 
-        $store = $this->findStore($storeId);
+        $store = $this->stores->findForAdministration(
+            $storeId
+        );
 
         if (! $store) {
             return ApiResponse::error(
@@ -88,7 +81,7 @@ class StoreController extends Controller
         return ApiResponse::success(
             message: 'تم جلب بيانات المتجر بنجاح',
             data: (new AdminStoreResource($store))
-                ->toArray(request())
+                ->toArray($request)
         );
     }
 
@@ -98,7 +91,9 @@ class StoreController extends Controller
     ): JsonResponse {
         $this->authorize('manage', Store::class);
 
-        $store = $this->findStore($storeId);
+        $store = $this->stores->findForAdministration(
+            $storeId
+        );
 
         if (! $store) {
             return ApiResponse::error(
@@ -107,9 +102,10 @@ class StoreController extends Controller
             );
         }
 
-        $store->fill($request->validated());
-        $store->save();
-        $store->loadCount('products');
+        $store = $this->stores->update(
+            $store,
+            $request->validated()
+        );
 
         return ApiResponse::success(
             message: 'تم تعديل بيانات المتجر بنجاح',
@@ -120,23 +116,23 @@ class StoreController extends Controller
 
     public function activate(int $storeId): JsonResponse
     {
-        $this->authorize('manage', Store::class);
-
-        return $this->setActive($storeId, true);
+        return $this->changeActiveState($storeId, true);
     }
 
     public function deactivate(int $storeId): JsonResponse
     {
-        $this->authorize('manage', Store::class);
-
-        return $this->setActive($storeId, false);
+        return $this->changeActiveState($storeId, false);
     }
 
-    private function setActive(
+    private function changeActiveState(
         int $storeId,
         bool $active
     ): JsonResponse {
-        $store = $this->findStore($storeId);
+        $this->authorize('manage', Store::class);
+
+        $store = $this->stores->findForAdministration(
+            $storeId
+        );
 
         if (! $store) {
             return ApiResponse::error(
@@ -145,42 +141,22 @@ class StoreController extends Controller
             );
         }
 
-        $alreadyInState = (bool) $store->is_active === $active;
+        $result = $this->stores->setActive(
+            $store,
+            $active
+        );
 
-        if (! $alreadyInState) {
-            $store->is_active = $active;
-            $store->save();
-        }
-
-        $store->loadCount('products');
-
-        if ($alreadyInState) {
-            $message = $active
-                ? 'المتجر مفعّل بالفعل'
-                : 'المتجر موقوف بالفعل';
-        } else {
-            $message = $active
-                ? 'تم تفعيل المتجر بنجاح'
-                : 'تم إيقاف المتجر بنجاح';
-        }
+        $message = match ([$active, $result['changed']]) {
+            [true, true] => 'تم تفعيل المتجر بنجاح',
+            [true, false] => 'المتجر مفعّل بالفعل',
+            [false, true] => 'تم إيقاف المتجر بنجاح',
+            [false, false] => 'المتجر موقوف بالفعل',
+        };
 
         return ApiResponse::success(
             message: $message,
-            data: (new AdminStoreResource($store))
+            data: (new AdminStoreResource($result['store']))
                 ->toArray(request())
         );
-    }
-
-    private function findStore(int $storeId): ?Store
-    {
-        return Store::withoutGlobalScope(ActiveStoreScope::class)
-            ->select([
-                'id',
-                'name',
-                'type',
-                'is_active',
-            ])
-            ->withCount('products')
-            ->find($storeId);
     }
 }

@@ -7,8 +7,9 @@ use App\Models\Product;
 use App\Models\Store;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use App\Contracts\OrderServiceInterface;
 
-class OrderService
+class OrderService implements OrderServiceInterface
 {
     public function __construct(
         private OrderPricingService $pricingService

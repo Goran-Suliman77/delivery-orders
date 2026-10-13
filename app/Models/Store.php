@@ -45,4 +45,12 @@ class Store extends Model
     ): Builder {
         return $query->where('type', $type);
     }
+
+    public function scopeForAdministration(
+        Builder $query
+    ): Builder {
+        return $query->withoutGlobalScope(
+            ActiveStoreScope::class
+        );
+    }
 }

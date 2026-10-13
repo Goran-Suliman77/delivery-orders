@@ -7,8 +7,9 @@ use App\Exceptions\DriverAssignmentException;
 use App\Models\Driver;
 use App\Models\Order;
 use Illuminate\Support\Facades\DB;
+use App\Contracts\DriverAssignmentServiceInterface;
 
-class DriverAssignmentService
+class DriverAssignmentService implements DriverAssignmentServiceInterface
 {
     public function assign(
         int $orderId,

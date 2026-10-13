@@ -15,153 +15,48 @@ use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Services\OrderStatusService;
 use App\Http\Requests\AssignDriverRequest;
 use App\Services\DriverAssignmentService;
+use App\Contracts\OrderQueryServiceInterface;
+use Illuminate\Http\JsonResponse;
+use App\Contracts\OrderServiceInterface;
+use App\Contracts\OrderStatusServiceInterface;
+use App\Contracts\DriverAssignmentServiceInterface;
 
 class OrderController extends Controller
 {
     public function __construct(
-        private OrderService $orderService
+        private readonly OrderService $orderService,
+        private readonly OrderQueryServiceInterface $orderQueries,
     ) {}
 
     /**
      * Display active orders.
      */
-    public function index(OrderIndexRequest $request)
-    {
+    public function index(
+        OrderIndexRequest $request
+    ): JsonResponse {
         $validated = $request->validated();
+
         $this->authorize('viewAny', Order::class);
-        $user = $request->user();
 
-        $canViewAll = $user->hasPermissionTo('orders.view_all');
-        $canViewOwn = $user->hasPermissionTo('orders.view_own');
-        $canViewAssigned = $user->hasPermissionTo('orders.view_assigned');
-
-        // لا نسمح بفلترة الطلبات حسب الزبون إلا لمن يملك الصلاحية.
+        // فلترة القائمة حسب الزبون تتطلب صلاحية صريحة.
         if (isset($validated['customer_id'])) {
             $this->authorize('filterByCustomer', Order::class);
         }
 
-        $query = Order::query()->active();
+        $orders = $this->orderQueries->paginateVisibleTo(
+            $request->user(),
+            $validated
+        );
 
-        // إذا لم يكن لديه صلاحية مشاهدة جميع الطلبات،
-        // نحصر النتائج بطلباته أو بالطلبات المسندة إليه.
-        if (! $canViewAll) {
-            $driverId = $canViewAssigned
-                ? $user->driver()->value('id')
-                : null;
-
-            $query->where(function ($subQuery) use (
-                $user,
-                $canViewOwn,
-                $canViewAssigned,
-                $driverId
-            ) {
-                $hasCondition = false;
-
-                if ($canViewOwn) {
-                    $subQuery->where('customer_id', $user->id);
-                    $hasCondition = true;
-                }
-
-                if ($canViewAssigned && $driverId !== null) {
-                    if ($hasCondition) {
-                        $subQuery->orWhere('driver_id', $driverId);
-                    } else {
-                        $subQuery->where('driver_id', $driverId);
-                    }
-
-                    $hasCondition = true;
-                }
-
-                if (! $hasCondition) {
-                    $subQuery->whereRaw('1 = 0');
-                }
-            });
-        }
-        $orders =  $query->select([
-            'id',
-            'customer_id',
-            'store_id',
-            'driver_id',
-            'status',
-            'created_at',
-        ])
-
-            ->with([
-                'customer:id,name',
-                'store:id,name',
-                'driver:id,user_id',
-                'driver.user:id,name',
-            ])
-
-            ->withCount('items')
-
-            ->when(
-                !empty($validated['status']),
-                fn($query) =>
-                $query->status(
-                    OrderStatus::from($validated['status'])
-                )
-            )
-
-            ->when(
-                !empty($validated['store_id']),
-                fn($query) =>
-                $query->forStore(
-                    (int) $validated['store_id']
-                )
-            )
-
-            ->when(
-                !empty($validated['driver_id']),
-                fn($query) =>
-                $query->forDriver(
-                    (int) $validated['driver_id']
-                )
-            )
-
-            ->when(
-                !empty($validated['customer_id']),
-                fn($query) =>
-                $query->forCustomer(
-                    (int) $validated['customer_id']
-                )
-            )
-
-            ->when(
-                !empty($validated['without_driver']),
-                fn($query) =>
-                $query->withoutDriver()
-            )
-
-            ->when(
-                !empty($validated['today']),
-                fn($query) =>
-                $query->today()
-            )
-
-            ->when(
-                !empty($validated['older_than_minutes']),
-                fn($query) =>
-                $query->olderThanMinutes(
-                    (int) $validated['older_than_minutes']
-                )
-            )
-
-            ->latest('id')
-            ->paginate(
-                (int) ($validated['per_page'] ?? 50)
-            );
-
-        $message = 'تم جلب الطلبات بنجاح';
-
+        // هذه رسائل استجابة فقط، وليست شروط استعلام.
         if ($orders->total() === 0) {
-            if (($validated['today'] ?? false) === true) {
-                $message = 'لا توجد طلبات لليوم تطابق معايير البحث.';
-            } else {
-                $message = 'لا توجد طلبات تطابق معايير البحث.';
-            }
+            $message = ($validated['today'] ?? false) === true
+                ? 'لا توجد طلبات لليوم تطابق معايير البحث.'
+                : 'لا توجد طلبات تطابق معايير البحث.';
         } elseif ($orders->isEmpty()) {
             $message = 'لا توجد طلبات في هذه الصفحة. جرّب صفحة أخرى.';
+        } else {
+            $message = 'تم جلب الطلبات بنجاح';
         }
 
         return ApiResponse::paginated(
@@ -198,17 +93,11 @@ class OrderController extends Controller
     /**
      * Display a specific order.
      */
-    public function show(Order $order)
+    public function show(Order $order): JsonResponse
     {
         $this->authorize('view', $order);
-        $order->load([
-            'customer:id,name',
-            'store:id,name',
-            'driver:id,user_id',
-            'driver.user:id,name',
-            'items:id,order_id,product_id,quantity,price',
-            'items.product:id,name',
-        ]);
+
+        $order = $this->orderQueries->loadDetails($order);
 
         return ApiResponse::success(
             message: 'تم جلب الطلب بنجاح',
@@ -220,7 +109,7 @@ class OrderController extends Controller
     public function updateStatus(
         UpdateOrderStatusRequest $request,
         Order $order,
-        OrderStatusService $statusService
+        OrderStatusServiceInterface $statusService
     ) {
         $validated = $request->validated();
 
@@ -254,7 +143,7 @@ class OrderController extends Controller
     public function assignDriver(
         AssignDriverRequest $request,
         Order $order,
-        DriverAssignmentService $assignmentService
+        DriverAssignmentServiceInterface $assignmentService
     ) {
         $validated = $request->validated();
         $this->authorize('assignDriver', $order);
@@ -266,14 +155,9 @@ class OrderController extends Controller
         /*
      * نحمّل العلاقات اللازمة لتفاصيل الطلب فقط.
      */
-        $updatedOrder->load([
-            'customer:id,name',
-            'store:id,name',
-            'driver:id,user_id',
-            'driver.user:id,name',
-            'items:id,order_id,product_id,quantity,price',
-            'items.product:id,name',
-        ]);
+        $updatedOrder = $this->orderQueries->loadDetails(
+            $updatedOrder
+        );
 
         return ApiResponse::success(
             message: 'تم تعيين السائق للطلب بنجاح',

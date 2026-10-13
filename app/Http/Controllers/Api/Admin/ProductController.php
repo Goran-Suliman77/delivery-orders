@@ -7,21 +7,28 @@ use App\Http\Requests\Admin\ProductRequest;
 use App\Http\Resources\AdminProductResource;
 use App\Http\Responses\ApiResponse;
 use App\Models\Product;
-use App\Models\Store;
-use App\Models\Scopes\ActiveStoreScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Contracts\ProductManagementServiceInterface;
+use App\Contracts\StoreManagementServiceInterface;
+use App\Http\Requests\StoreProductIndexRequest;
 
 class ProductController extends Controller
 {
-    //
+    public function __construct(
+        private readonly ProductManagementServiceInterface $products,
+        private readonly StoreManagementServiceInterface $stores,
+    ) {}
+
     public function indexForStore(
-        Request $request,
+        StoreProductIndexRequest $request,
         int $storeId
     ): JsonResponse {
         $this->authorize('manage', Product::class);
 
-        $store = $this->findStore($storeId);
+        $store = $this->stores->findForAdministration(
+            $storeId
+        );
 
         if (! $store) {
             return ApiResponse::error(
@@ -30,21 +37,14 @@ class ProductController extends Controller
             );
         }
 
-        $perPage = min(
-            max((int) $request->query('per_page', 50), 1),
-            100
+        $perPage = (int) (
+            $request->validated()['per_page'] ?? 50
         );
 
-        $products = $store->products()
-            ->select([
-                'products.id',
-                'products.store_id',
-                'products.name',
-                'products.price',
-                'products.is_active',
-            ])
-            ->latest('products.id')
-            ->paginate($perPage);
+        $products = $this->products->paginateForStore(
+            $store,
+            $perPage
+        );
 
         $message = $products->total() > 0
             ? 'تم جلب منتجات المتجر بنجاح'
@@ -64,7 +64,9 @@ class ProductController extends Controller
     ): JsonResponse {
         $this->authorize('manage', Product::class);
 
-        $store = $this->findStore($storeId);
+        $store = $this->stores->findForAdministration(
+            $storeId
+        );
 
         if (! $store) {
             return ApiResponse::error(
@@ -73,11 +75,10 @@ class ProductController extends Controller
             );
         }
 
-        $product = $store->products()->create([
-            'name' => $request->validated('name'),
-            'price' => $request->validated('price'),
-            'is_active' => true,
-        ]);
+        $product = $this->products->createForStore(
+            $store,
+            $request->validated()
+        );
 
         return ApiResponse::success(
             message: 'تم إنشاء المنتج بنجاح',
@@ -87,11 +88,15 @@ class ProductController extends Controller
         );
     }
 
-    public function show(int $productId): JsonResponse
-    {
+    public function show(
+        Request $request,
+        int $productId
+    ): JsonResponse {
         $this->authorize('manage', Product::class);
 
-        $product = $this->findProduct($productId);
+        $product = $this->products->findForAdministration(
+            $productId
+        );
 
         if (! $product) {
             return ApiResponse::error(
@@ -103,7 +108,7 @@ class ProductController extends Controller
         return ApiResponse::success(
             message: 'تم جلب بيانات المنتج بنجاح',
             data: (new AdminProductResource($product))
-                ->toArray(request())
+                ->toArray($request)
         );
     }
 
@@ -113,7 +118,9 @@ class ProductController extends Controller
     ): JsonResponse {
         $this->authorize('manage', Product::class);
 
-        $product = $this->findProduct($productId);
+        $product = $this->products->findForAdministration(
+            $productId
+        );
 
         if (! $product) {
             return ApiResponse::error(
@@ -122,8 +129,10 @@ class ProductController extends Controller
             );
         }
 
-        $product->fill($request->validated());
-        $product->save();
+        $product = $this->products->update(
+            $product,
+            $request->validated()
+        );
 
         return ApiResponse::success(
             message: 'تم تعديل المنتج بنجاح',
@@ -134,23 +143,23 @@ class ProductController extends Controller
 
     public function activate(int $productId): JsonResponse
     {
-        $this->authorize('manage', Product::class);
-
-        return $this->setActive($productId, true);
+        return $this->changeActiveState($productId, true);
     }
 
     public function deactivate(int $productId): JsonResponse
     {
-        $this->authorize('manage', Product::class);
-
-        return $this->setActive($productId, false);
+        return $this->changeActiveState($productId, false);
     }
 
-    private function setActive(
+    private function changeActiveState(
         int $productId,
         bool $active
     ): JsonResponse {
-        $product = $this->findProduct($productId);
+        $this->authorize('manage', Product::class);
+
+        $product = $this->products->findForAdministration(
+            $productId
+        );
 
         if (! $product) {
             return ApiResponse::error(
@@ -159,46 +168,22 @@ class ProductController extends Controller
             );
         }
 
-        $alreadyInState = (bool) $product->is_active === $active;
+        $result = $this->products->setActive(
+            $product,
+            $active
+        );
 
-        if (! $alreadyInState) {
-            $product->is_active = $active;
-            $product->save();
-        }
-
-        if ($alreadyInState) {
-            $message = $active
-                ? 'المنتج مفعّل بالفعل'
-                : 'المنتج موقوف بالفعل';
-        } else {
-            $message = $active
-                ? 'تم تفعيل المنتج بنجاح'
-                : 'تم إيقاف المنتج بنجاح';
-        }
+        $message = match ([$active, $result['changed']]) {
+            [true, true] => 'تم تفعيل المنتج بنجاح',
+            [true, false] => 'المنتج مفعّل بالفعل',
+            [false, true] => 'تم إيقاف المنتج بنجاح',
+            [false, false] => 'المنتج موقوف بالفعل',
+        };
 
         return ApiResponse::success(
             message: $message,
-            data: (new AdminProductResource($product))
+            data: (new AdminProductResource($result['product']))
                 ->toArray(request())
         );
-    }
-
-    private function findStore(int $storeId): ?Store
-    {
-        return Store::withoutGlobalScope(ActiveStoreScope::class)
-            ->find($storeId);
-    }
-
-    private function findProduct(int $productId): ?Product
-    {
-        return Product::query()
-            ->select([
-                'id',
-                'store_id',
-                'name',
-                'price',
-                'is_active',
-            ])
-            ->find($productId);
     }
 }

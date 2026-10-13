@@ -7,8 +7,9 @@ use App\Exceptions\OrderStatusTransitionException;
 use App\Models\Order;
 use App\Models\Driver;
 use Illuminate\Support\Facades\DB;
+use App\Contracts\OrderStatusServiceInterface;
 
-class OrderStatusService
+class OrderStatusService implements OrderStatusServiceInterface
 {
     public function change(
         int $orderId,

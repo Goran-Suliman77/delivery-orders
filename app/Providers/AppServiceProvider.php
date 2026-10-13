@@ -7,6 +7,14 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
+use App\Contracts\OrderQueryServiceInterface;
+use App\Services\OrderQueryService;
+use App\Contracts\OrderServiceInterface;
+use App\Contracts\OrderStatusServiceInterface;
+use App\Contracts\DriverAssignmentServiceInterface;
+use App\Services\OrderService;
+use App\Services\OrderStatusService;
+use App\Services\DriverAssignmentService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -16,6 +24,44 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         //
+        $this->app->bind(
+            OrderQueryServiceInterface::class,
+            OrderQueryService::class
+        );
+        $this->app->bind(
+            \App\Contracts\StoreQueryServiceInterface::class,
+            \App\Services\StoreQueryService::class
+        );
+
+        $this->app->bind(
+            \App\Contracts\ProductQueryServiceInterface::class,
+            \App\Services\ProductQueryService::class
+        );
+
+        $this->app->bind(
+            \App\Contracts\StoreManagementServiceInterface::class,
+            \App\Services\StoreManagementService::class
+        );
+
+        $this->app->bind(
+            \App\Contracts\ProductManagementServiceInterface::class,
+            \App\Services\ProductManagementService::class
+        );
+
+        $this->app->bind(
+            OrderServiceInterface::class,
+            OrderService::class
+        );
+
+        $this->app->bind(
+            OrderStatusServiceInterface::class,
+            OrderStatusService::class
+        );
+
+        $this->app->bind(
+            DriverAssignmentServiceInterface::class,
+            DriverAssignmentService::class
+        );
     }
 
     /**

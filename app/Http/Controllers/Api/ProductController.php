@@ -7,88 +7,51 @@ use Illuminate\Http\Request;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Http\Responses\ApiResponse;
-
+use App\Contracts\ProductQueryServiceInterface;
+use App\Http\Requests\ProductIndexRequest;
+use Illuminate\Http\JsonResponse;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
-    {
-        $perPage = min(
-            max($request->integer('per_page', 20), 1),
-            100
+
+    public function __construct(
+        private readonly ProductQueryServiceInterface $productQueries,
+    ) {}
+    public function index(
+        ProductIndexRequest $request
+    ): JsonResponse {
+        $products = $this->productQueries->paginatePublic(
+            $request->validated()
         );
+        $message = $products->total() > 0
+            ? 'تم جلب المنتجات بنجاح'
+            : 'لا توجد منتجات متاحة تطابق معايير البحث';
 
-        $query = Product::query()
-            ->select([
-                'id',
-                'store_id',
-                'name',
-                'price',
-            ])
-            ->where('is_active', true)
-            ->whereHas('store')
-            ->with('store:id,name');
-
-        if ($request->filled('store_id')) {
-            $query->where(
-                'store_id',
-                $request->integer('store_id')
-            );
-        }
-
-        $products = $query
-            ->latest('id')
-            ->paginate($perPage);
-
-        $data = collect($products->items())
-            ->map(
-                fn($product) => (new ProductResource($product))
-                    ->toArray($request)
-            )
-            ->values();
-
-        return ApiResponse::success(
-            message: 'تم جلب المنتجات بنجاح',
-            data: $data,
-            extra: [
-                'pagination' => [
-                    'current_page' => $products->currentPage(),
-                    'per_page' => $products->perPage(),
-                    'total' => $products->total(),
-                    'last_page' => $products->lastPage(),
-                    'from' => $products->firstItem(),
-                    'to' => $products->lastItem(),
-                ],
-            ]
+        return ApiResponse::paginated(
+            $products,
+            fn($product) => (new ProductResource($product))
+                ->toArray($request),
+            $message
         );
     }
 
+    public function show(
+        Request $request,
+        int $product
+    ): JsonResponse {
+        $productModel = $this->productQueries
+            ->findPublicById($product);
 
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Product $product)
-    {
-        $product = Product::query()
-            ->select([
-                'id',
-                'store_id',
-                'name',
-                'price',
-            ])
-            ->where('is_active', true)
-            ->whereHas('store')
-            ->with('store:id,name')
-            ->findOrFail($product);
-
+        if (! $productModel) {
+            return ApiResponse::error(
+                message: 'المنتج المطلوب غير موجود أو غير متاح',
+                status: 404
+            );
+        }
         return ApiResponse::success(
-            message: 'تم جلب المنتج بنجاح',
-            data: (new ProductResource($product))
-                ->toArray(request())
+            message: 'تم جلب بيانات المنتج بنجاح',
+            data: (new ProductResource($productModel))
+                ->toArray($request)
         );
     }
 }
